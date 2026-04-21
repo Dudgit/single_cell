@@ -1,0 +1,12 @@
+*.sif
+data
+lightning_logs
+models/CPA
+models/GEARS
+models/PERTURBNET
+notebooks
+outputs
+utils
+*.pyc
+*.log
+saved_models

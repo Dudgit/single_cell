@@ -1,0 +1,97 @@
+gears_kwargs:
+  adamson: # Single cell perturbation
+    hidden_size: 64
+    epochs: 20
+    perturb_key: "condition"
+    ctrl_key: "ctrl"
+  dixit: # Single cell + classification
+    hidden_size: 64
+    epochs: 20
+    perturb_key: "condition"
+    ctrl_key: "ctrl"
+  norman: # multi-perturbation
+    hidden_size: 64
+    epochs: 20  
+
+PerturbNet_kwargs:
+  adamson: # Single cell perturbation
+    #? TODO: use real hyperparameters from literature
+    train_batch_size: 128
+    val_batch_size: 128
+    test_batch_size: 128
+  dixit: # Single cell + classification
+    #? TODO: use real hyperparameters from literature
+    train_batch_size: 128
+    val_batch_size: 128
+    test_batch_size: 128
+CPA_kwargs:
+  #? Use real hyperparameters from literature
+  Norman: # multi-perturbation
+    train_batch_size: 128
+    val_batch_size: 128
+    test_batch_size: 128
+
+Regina_kwargs:
+  adamson: # Single cell perturbation
+    max_epochs: 100
+    batch_size: 64
+    perturb_key: "condition"
+    ctrl_key: "ctrl"
+    num_paddings: 12
+    model_kwargs:
+      input_dim: 317
+      seq_len: 16
+      d_model: 512
+      n_layers: 4
+      n_heads: 8
+      z_dim: 256
+      n_real_genes: 5060
+      silence_val: -1.0
+      reconFactr: 1.5
+      centerFactr: 0.5
+      lossClassFactr: 1.
+      lossLatentFactr: 1.
+      lossCycleFactr: 5.
+      adversarialFactr: 3.5 
+      lossRegFactr: 0.0001
+      classes: ["Homeostasis", "Stressed"]
+
+
+
+  dixit: # Single cell + classification
+    max_epochs: 100
+    batch_size: 64
+    perturb_key: "condition"
+    ctrl_key: "ctrl"
+    num_paddings: 12
+    model_kwargs:
+      input_dim: 314
+      seq_len: 16
+      d_model: 512
+      n_layers: 4
+      n_heads: 8
+      z_dim: 256
+      n_real_genes: 5012
+      silence_val: -0.1
+      reconFactr: 3.0
+      centerFactr: 0.5
+      lossClassFactr: 0.1
+      lossLatentFactr: 1.
+      lossCycleFactr: 1.
+      adversarialFactr: 0.1 
+      lossRegFactr: 0.0001
+      classes: ["Resting", "Activated"]
+
+
+  VIP: # No GO graph data
+    max_epochs: 150
+    batch_size: 128
+
+pert_keys:
+  adamson: "condition"
+  dixit: "condition"
+  norman: "condition"
+ctrl_keys:
+  adamson: "ctrl"
+  dixit: "ctrl"
+  norman: "ctrl"
