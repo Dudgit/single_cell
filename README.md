@@ -8,6 +8,63 @@ To install REGINA run:
 ``` 
 singularity build --fix-perms REGINA.sif REGINA.def
 ``` 
+## Data
+Data is downloaded via GEARS [link](https://github.com/snap-stanford/GEARS):
+``` 
+from gears import PertData, GEARS
+# get data
+dataset_name = 'norman'
+pert_data = PertData('./data')
+# load dataset in paper: norman, adamson, dixit.
+pert_data.load(data_name = f'{dataset_name}',data_path=None)
+```
+Our methods require to split the data into train-validation-test split. You can either use GEARS custom splitting method, which we used or use the split dict we got, and included.
+
+## Preprocessing
+Splitting the data:
+```
+train_adata = adata[adata.obs[perturbation_key].isin(custom_split_dict['train'])]
+train_adata.write_h5ad("data/{dataset_name}/train.h5ad")
+val_adata = adata[adata.obs[perturbation_key].isin(custom_split_dict['val'])]
+val_adata.write_h5ad("data/{dataset_name}/val.h5ad")
+test_adata = adata[adata.obs[perturbation_key].isin(custom_split_dict['test'])]
+test_adata.write_h5ad("data/{dataset_name}/test.h5ad")
+
+```
+
+To use REGINA latent classifier you can add any given method to generate class information. The methods we used for dixit, norman, adamson dataset is:
+``` 
+def add_binary_state(adata):
+    adata.var_names = adata.var.gene_name
+    stress_prefixes = ('HSP', 'ATF', 'DNAJ', 'ERN', 'EIF2', 'CEBP')
+
+    available_genes = adata.var_names.tolist()
+    valid_markers = [g for g in available_genes if g.startswith(stress_prefixes)]
+    sc.tl.score_genes(adata, gene_list=valid_markers, score_name='stress_score')
+    threshold = adata.obs['stress_score'].quantile(0.70)
+    adata.obs['cell_state'] = 'Homeostasis'
+    adata.obs.loc[adata.obs['stress_score'] > threshold, 'cell_state'] = 'Stressed'
+
+    print("\nFinal State Distribution:")
+    print(adata.obs['cell_state'].value_counts())
+    return adata
+train_adata = ad.read_h5ad(f"data/{dataset_name}/train.h5ad")
+val_adata = ad.read_h5ad(f"data/{dataset_name}/val.h5ad")
+test_adata = ad.read_h5ad(f"data/{dataset_name}/test.h5ad")
+
+train_adata = add_binary_state(train_adata)
+val_adata = add_binary_state(val_adata)
+test_adata = add_binary_state(test_adata)
+
+train_adata.write_h5ad(f"data/{dataset_name}/train_processed.h5ad")
+val_adata.write_h5ad(f"data/{dataset_name}/val_processed.h5ad")
+test_adata.write_h5ad(f"data/{dataset_name}/test_processed.h5ad")
+gene_to_idx = { gene:i for i, gene in enumerate(train_adata.var_names) }
+import pickle
+with open("data/{dataset_name}/gene_to_idx.pkl", "wb") as f:
+    pickle.dump(gene_to_idx, f)
+``` 
+
 
 ## Method
 
