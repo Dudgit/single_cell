@@ -1,7 +1,4 @@
 
-#!
-#! This is just the pseudo-code
-#!
 
 import gc
 import os
@@ -13,7 +10,6 @@ pd.Series.nonzero = lambda self: self.to_numpy().nonzero()
 from models.REGINA.train import phase1, phase2
 from models.REGINA.dataloader import get_loaders
 import torch
-#from models.PERTURBNET import train as train_PERTURBNET
 
 def train(model_name,dataset_name,cfg):
     
@@ -36,5 +32,5 @@ def train(model_name,dataset_name,cfg):
 if __name__ == "__main__":
     cfg = OmegaConf.load('config.yaml')
     run_name = "norman"
-    train(model_name="GEARS",dataset_name=run_name,cfg=cfg)
+    train(model_name="REGINA",dataset_name=run_name,cfg=cfg)
     
