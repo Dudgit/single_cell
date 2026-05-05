@@ -68,7 +68,7 @@ def evaluate_h5ad(res_path,dataset_name,model_name,perturb_key = "perturbation",
     pickle.dump(distribution_results, open(f'outputs/{dataset_name}/{model_name}_distribution.pkl', 'wb'))
 
 if __name__ == "__main__":
-    dataset_name = "dixit"
+    dataset_name = "norman"
     model_name = "REGINA"
     num_samples = 100
     
