@@ -63,7 +63,21 @@ gene_to_idx = { gene:i for i, gene in enumerate(train_adata.var_names) }
 import pickle
 with open("data/{dataset_name}/gene_to_idx.pkl", "wb") as f:
     pickle.dump(gene_to_idx, f)
-``` 
+```
+## Train & inference
+After the preprocessing you can simply run the train.sh from bash or:
+
+```
+singularity exec --nv REGINA.sif python3 train_models.py
+```
+In the end of the file you can modify which dataset you want to train on. Please ignore the rest of the models!
+
+For evlauation you can call the eval.sh or:
+
+```
+singularity exec --nv REGINA.sif python3 evaluate_h5ad.py
+
+```
 
 
 ## Method
