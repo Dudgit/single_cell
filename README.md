@@ -1,93 +1,86 @@
-## Phase 1: Centered Latent Autoencoder.
-### Vanilla AE
-This step has been already implemented. We generate a "good" latent representation from our single-cell data, that can be reconstructed into the original state. Later we will work in this latent encoded state. The formulation is:  
-$$
-Z = E_{\theta}(X)$$  
-where Z is the latent representation of single-cell gene expression vector X, $E_{\theta}$ is the encoder network parametrized by $\theta$ parameters. As an autoencoder we will encode non-perturbed and perturbed data into latent space and then reconstruct them to real space.  
-$$
-Z = E_{\theta}(X), \hat{X} = D_{\phi}(Z)$$  
-This pipeline is evaluated by a mean squared error loss: $\mathcal{L}_{MSE}$.
+## Method
 
-### Class preserving.
-When we create latent representation vectors, the class information can be mashed up, vanish, since the model is not told to keep that information.My approach to regularize the latent space by a GAN-like critic. For every gene, we also know their class $C$, which we can predict in latent space.
+![Training pipeline of the regularized autoencoder.](figs/phase1.png)
+*Figure 1: Training pipeline of the regularized autoencoder.*
 
-$$
-\hat{C}_i = CL_{\Psi}(Z_i)$$  
-And then calculate the classification loss:
-$$
-\mathcal{L}_{class} = CE(\hat{C}_i,C_i)$$  
-We add this loss to the original loss, therefore the model needs to learn class preserving representation.
+### Phase One: Regularized Latent Autoencoder
 
-### Centroid generation
-Simple autoencoders doesn't regularize their latent space, one solution to this problem is the Varriational Autoencoder pipeline. I will not go too much into detail, but I had to realize that approach will not work in this case.Unfortunatelly class preserving information, does not mean distinguishable latent clustering. 
-We added Centering loss which enforces to create latent space where classes are in separable clusters.
+Our approach follows the general paradigm of latent diffusion models [rombach2022high], in which high-dimensional observations are first mapped into a lower-dimensional latent space via an autoencoder.
 
-### Final Loss
-The whole loss function is made up from these main components and some minor regularizations, so the weights will not explode.
+Given the high dimensionality of gene expression profiles, processing the full vector with standard linear layers is computationally heavy. To address this, we tokenize the input vector into a sequence of lower-dimensional segments. These segments are then processed by a Transformer encoder [vaswani2017attention], utilizing bidirectional self-attention [DBLP:journals/corr/abs-1810-04805] to capture complex, non-local gene dependencies.
 
-## PHase 2 Cycle Gan
-### Cycle Transformer
-Since we only have unpaired data we can't directly train a supervised latent transition model. Instead I will use a CycleConsistent Latent Transformer model. This means that every latent vector(control and perturbed) will be transformed into their counterpart and then back.  
-$$
-T^{fwd}_{\Theta_1}(Z_{ctrl})=Z_{pert}
-$$  
-$$
-T^{bwd}_{\Theta_2}(Z_{pert})=Z_{ctrl}
-$$  
-Then we add a cycle consistency loss:  
-$$
-\mathcal{L}_{cycle} = MSE(Z_{ctrl},T^{bwd}_{\Theta_2}(T^{fwd}_{\Theta_1}(Z_{ctrl}))) + MSE(Z_{pert},T^{fwd}_{\Theta_1}(T^{bwd}_{\Theta_2}(Z_{pert})))
-$$
+Let $X \in \mathbb{R}^d$ denote a gene expression vector. An encoder $E_{\theta}$ projects $X$ into a latent representation $z$, which is subsequently reconstructed as $X_{\mathrm{rec}}$ by a decoder $D_{\phi}$:
 
-### Class Consistency
-To further regularize the transition model, I added a class consistency loss. After transforming a latent vector into its counterpart, the class should remain the same. Therefore we can use the pretrained latent classifier from phase 1 to predict the class of transformed latent vectors.  
-$$
-\hat{C}_{pert} = CL_{\Psi}(T^{fwd}_{\Theta_1}(Z_{ctrl}))
-$$  
-$$
-\hat{C}_{ctrl} = CL_{\Psi}(T^{bwd}_{\Theta_2}(Z_{pert}))
-$$  
-Then we can calculate the classification loss for both transformed latent vectors:  
-$$
-\mathcal{L}_{class\_trans} = CE(\hat{C}_{pert},C_{ctrl}) + CE(\hat{C}_{ctrl},C_{pert})
-$$
+$$X_{\mathrm{rec}}=D_{\phi}(E_{\theta}(X))$$
 
-### Adversarial Traning
-This transition model could learn simple identity mapping, where  
-$$
-\hat{Z}=T^{fwd,bwd}_{\Theta_1, \Theta_2}(Z_{ctrl,pert}) = Z_{ctrl,pert}$$.
+A standard autoencoder does not explicitly enforce preservation of biologically meaningful class information, such as the cellular state. To be able to study perturbation effects in the latent space, we augment the model with a latent classifier $C_{\Psi}$ that predicts the cell state directly from the latent representation, i.e., $\hat{c}_i=C_{\Psi}(z_i)$. We decided not to place it in the reconstruction space due to the high dimensionality of virtual cell modeling. In virtual cell analysis this cell state can be for example the cell cycle state, a population where the specific cell is originated, is it in stressed state.
 
-To avoid this I added an extra discriminator $D_{\phi}$ network in latent space, which tries to classify real and fake (transformed) latent vectors.
+#### Latent Space Regularization.
+The classifier is trained using a stop-gradient operation on the encoder output, preventing its updates from affecting the encoder:
 
- To increase discriminator performance the perturbation index is added to the inputs, therefore it can identify if the transition model is actually changing the latent vector or not. There is a possibility that some perturbed state are indistinguishable from control state, but in this case the perturbation doesn't matter anyways.
-The loss function for the discriminator is set to be mean squared error loss to stabilize training, since GAN training is famous for its instability.
-$$
-\mathcal{L}_{D} = MSE(D_{\phi}(Z_{real},pert\_index),1) + MSE(D_{\phi}(T^{fwd,bwd}_{\Theta_1, \Theta_2}(Z_{ctrl,pert}),pert\_index),0)$$  
-And the loss for the transition model is the generator loss, which is the direct opposite of the discriminator loss.
-$$\mathcal{L}_{G} = MSE(D_{\phi}(T^{fwd,bwd}_{\Theta_1, \Theta_2}(Z_{ctrl,pert}),pert\_index),1)$$
+$$\mathcal{L}_{\mathrm{sg}}=\mathrm{CE}\bigl(C_{\Psi}(\mathrm{sg}[E_{\theta}(X)]),c\bigr)$$
 
-### Extra regularizations
-To further regularize the transition model, I added Maximum Mean Discrepancy loss between real and fake (transformed) latent vectors. Since it's a GAN-like training, the generator could collapse to a single point in latent space. MMD loss will enforce to create similar distributions between real and fake latent vectors.
+where $\mathrm{sg}[\cdot]$ denotes the stop-gradient operator. This loss is used exclusively for the classifier's training step.
 
-### Prompting
-To solve the problem of unseen perturbation effect during training, we implement a pre-embedding fake perturbation effect. This will take a copy of the original gene expression vector, change the perturbed expression value to -5 (for transition and normalization purposes, otherwise it would be zero) and then we embed both to a latent vector. This two latent vector will be substracted from each other and will go into the transition transformer as a condition (similar to any kind of prompt-condition in Attention-based models).  
+Training a vanilla autoencoder typically results in an unregularized latent space that is unsuitable for downstream perturbation modeling [kingma2013auto]. 
+To address this, we introduce a *center loss* ($\mathcal{L}_{\mathrm{CE}}$) [wen2016discriminative] that encourages latent representations of the same biological state (e.g., control or perturbed) to form compact and well-separated clusters. 
+We further employ an auxiliary regularization term ($\mathcal{L}_{\mathrm{reg}}$) [regularization] to mitigate gradient instability during training. 
 
-$$
-X_{\text{fake}}[i] =
-\begin{cases}
-X_{\text{ctrl}}[i], & \text{if } i \neq \text{pert\_idx}, \\
--5, & \text{if } i = \text{pert\_idx}.
-\end{cases}
-$$  
+To additionally regularize the encoder, we include a second classification term without the stop-gradient:
 
-$$
-Z_{\text{fake}} = E_{\theta}(X_{\text{fake}})$$  
+$$\mathcal{L}_{\mathrm{CLF}}=\mathrm{CE}\bigl(C_{\Psi}(E_{\theta}(X)),c\bigr)$$
 
-$$Z_{\text{prompt}} = Z_{\text{ctrl}} - Z_{\text{fake}}$$
+This term encourages the encoder to produce latents that are themselves predictive of the cell state, while the classifier receives gradients from both terms (which only improves its accuracy and does not harm training dynamics).
 
-Therefore the transitioned latent vector will be:
-$$
-Z^{fwd}_{pert} = T^{fwd}_{\Theta_1}(Z_{ctrl}, Z_{prompt})
-$$
-$$Z^{bwd}_{ctrl} = T^{bwd}_{\Theta_2}(Z_{pert}, Z_{prompt})$$
-Note that we used the same prompt for both forward and backward transformations. This is due to the fact that we don't actually know what is the inverse of the perturbation, or at least I don't have any knowledge about it. So the backward transition model should learn what would be an ideal inversion of this specific perturbation, which generated the perturbed state.
+The full autoencoder objective is then:
+
+$$\mathcal{L}_{\mathrm{AE}}=\lambda_{\mathrm{MSE}}\mathcal{L}_{\mathrm{MSE}}+\lambda_{\mathrm{CE}}\mathcal{L}_{\mathrm{CE}}+\lambda_{\mathrm{reg}}\mathcal{L}_{\mathrm{reg}}+\lambda_{\mathrm{CLF}}\mathcal{L}_{\mathrm{CLF}}$$
+
+where $\mathcal{L}_{\mathrm{MSE}}$ is the reconstruction loss, $\mathcal{L}_{\mathrm{CE}}$ the center loss, $\mathcal{L}_{\mathrm{reg}}$ combines auxiliary regularization terms, and the $\lambda$ coefficients are scalar hyperparameters.
+
+#### Latent Consistency.
+To ensure training stability [GAN_inst1, GAN_inst2] and a self consistent encoder and decoder we applied consistency monitoring. A latent sample $z_i$ is decoded and re-encoded as $z_{\mathrm{rec}}=E_{\theta}(D_{\phi}(z_i))$, and both representations are required to produce consistent class predictions:
+
+$$\mathcal{L}_{\mathrm{cons}}=\mathrm{CE}\bigl(C_{\Psi}(z_i),C_{\Psi}(z_{\mathrm{rec}})\bigr)$$
+
+where $\mathrm{CE}(\cdot)$ denotes the cross-entropy loss. The training is stopped if this error starts to constantly increase.
+
+### Second Phase: Latent Transition Modeling
+
+![Training pipeline of the second phase of training.](figs/phase2_v3.png)
+*Figure 2: Training pipeline of the second phase of training.*
+
+Due to the absence of paired control–perturbation samples, a supervised latent transition model cannot be trained directly. We therefore adopt a *latent cycle GAN* framework [zhu2017unpaired, latent_cycle_gan] that learns bidirectional mappings between control latent distributions $Z_{\mathrm{ctrl}}$ and perturbed latent distributions $Z_{\mathrm{pert}}$. 
+
+A *forward transition block* $T^{\mathrm{fwd}}_{\Theta_1}$ maps control latents to perturbed latents, while a *backward transition block* $T^{\mathrm{bwd}}_{\Theta_2}$ performs the inverse mapping: 
+
+$$Z_{\mathrm{pert}}=T^{\mathrm{fwd}}_{\Theta_1}(Z_{\mathrm{ctrl}}), \qquad Z_{\mathrm{ctrl}}=T^{\mathrm{bwd}}_{\Theta_2}(Z_{\mathrm{pert}})$$
+
+Since the true inverse of a biological perturbation is unknown, the backward transition model is tasked with learning an implicit inversion corresponding to the perturbation that generated the observed perturbed state. Converting perturbed state to control state has no biological meaning, it was just a proxy task to increase the quality of our data generation.
+To ensure consistency between these transformations, we apply a *cycle-consistency loss* $\mathcal{L}_{\mathrm{cycle}}$ that enforces the reconstruction of latent vectors after forward–backward and backward–forward passes. This loss utilizes MSE to minimize the distance between the original latents and their cycled counterparts:
+
+$$\mathcal{L}_{\mathrm{cycle}}=\mathrm{MSE}\left(Z_{\mathrm{ctrl}},T^{\mathrm{bwd}}_{\Theta_2}(T^{\mathrm{fwd}}_{\Theta_1}(Z_{\mathrm{ctrl}}))\right)+\mathrm{MSE}\left(Z_{\mathrm{pert}},T^{\mathrm{fwd}}_{\Theta_1}(T^{\mathrm{bwd}}_{\Theta_2}(Z_{\mathrm{pert}}))\right)$$
+
+#### Adversarial Training
+Without additional constraints, the transition model may collapse to a trivial identity mapping, i.e., $T(Z)=Z$. To prevent this degeneration, we apply an adversarial discriminator $D_{\phi}$ operating in latent space [goodfellow2014generative], which distinguishes real latent vectors $Z_{\mathrm{real}}$ from transformed vectors $\hat{Z}=T(Z)$. To ensure that the learned transformations are perturbation-specific, the discriminator is explicitly conditioned on the perturbation index $p$.
+To stabilize training, $D_{\phi}$ is optimized using a Mean Squared Error (MSE) objective $\mathcal{L}_{D}$ [mao2017least]. Here, the notation $Z_{\mathrm{ctrl,pert}}$ refers to the input latent vector from either the control or perturbed domain, depending on the direction of the mapping:
+
+$$\mathcal{L}_{D}=\mathrm{MSE}\!\left(D_{\phi}(Z_{\mathrm{real}},p),1\right)+\mathrm{MSE}\!\left(D_{\phi}(T(Z_{\mathrm{ctrl,pert}}),p),0\right)$$
+
+where $T(\cdot)$ denotes either the forward or backward transformation. 
+The transition model is then trained using the corresponding generator loss $\mathcal{L}_{G}$, which encourages the model to produce transformed latents that the discriminator classifies as "real" (target value of 1):
+
+$$\mathcal{L}_{G}=\mathrm{MSE}\left(D_{\phi}(T(Z_{\mathrm{ctrl,pert}}),p),1\right)$$
+
+#### Prompt-Based Conditioning for Unseen Perturbations
+
+To address unseen perturbations during training, we applied a *latent prompting* [latent_prompt1, latent_prompt2] that explicitly encodes perturbation information. Given a perturbation index $p$, which denotes the index of the perturbed gene in the target gene expression vector, a synthetic gene expression vector $X_{\mathrm{fake}}$ is constructed by copying the control expression and assigning a fixed value of $-1$ to the perturbed gene at index $p$. 
+If multiple gene is perturbed the assigned value is also going to be multiplied with that amount. 
+The corresponding latent embedding $Z_{\mathrm{fake}}=E_{\theta}(X_{\mathrm{fake}})$ is used to define a perturbation prompt
+$Z_{\mathrm{prompt}}=Z_{\mathrm{ctrl}}-Z_{\mathrm{fake}}$.
+
+The transition model is conditioned on this prompt as:
+
+$$Z^{\mathrm{fwd}}_{\mathrm{pert}}=T^{\mathrm{fwd}}_{\Theta_1}(Z_{\mathrm{ctrl}},Z_{\mathrm{prompt}}), \qquad Z^{\mathrm{bwd}}_{\mathrm{ctrl}}=T^{\mathrm{bwd}}_{\Theta_2}(Z_{\mathrm{pert}},Z_{\mathrm{prompt}})$$
+
+The same prompt is used for both forward and backward transformations.
