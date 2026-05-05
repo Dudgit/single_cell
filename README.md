@@ -1,3 +1,14 @@
+# REGINA: Regularized Encoder with Latent Cycle-GAN for In-vitro Neural Cell Perturbation Approximation.
+In this github we introduce every material needed for our REGINA research. This is a virtuall cell modelling pipeline with generative AI approaches centered around Cycle-GAN workflow.
+
+## Installation
+For the easies possible reproduction we included the singularity file we used to work with the pipeline. To be able to use it first you need to install singularity [link](https://docs.sylabs.io/guides/3.5/user-guide/introduction.html).  
+
+To install REGINA run:
+``` 
+singularity build --fix-perms REGINA.sif REGINA.def
+``` 
+
 ## Method
 
 ![Training pipeline of the regularized autoencoder.](figs/phase1.png)
