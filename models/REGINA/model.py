@@ -195,23 +195,14 @@ class REGINA(pl.LightningModule):
             else:
                 full_multi_hot = pert_multi_hot
 
-        # 2. Reshape to match x_ctrl [B, Patches, Dim]
         multi_hot_reshaped = full_multi_hot.view(B, num_patches, patch_dim)
         
-        # 3. Separate Binary Masking from Dosage Intensity
-        # binary_mask ensures we never get negative keep_masks, even if dosage is 5.0
         binary_mask = (multi_hot_reshaped > 0).float()
         keep_mask = 1.0 - binary_mask
         
-        # 4. Apply Dosage-Scaled Silencing
-        # We MUST use a negative base value so the dosage multiplier has an effect.
-        # If normalized=True (z-scored), -3.0 acts as a strong suppression signal.
-        base_silence_val = self.silence_val if normalized else -5.0
-        
-        # Zero out the real gene, then inject the artificial dosage signal
+        base_silence_val = self.silence_val
         x_silenced = (x_ctrl * keep_mask) + (multi_hot_reshaped * base_silence_val)
         
-        # 5. Generate the Prompt vector using the Encoder
         with torch.no_grad():
             z_ctrl = self.encoder(x_ctrl)
             z_silenced = self.encoder(x_silenced)
@@ -231,7 +222,7 @@ class REGINA(pl.LightningModule):
         # Generation step
         if optimizer_idx == 0:
             lossDict = {}
-            # 1. Forward: Add perturbation
+            
             z_prompt_fwd = self.get_perturbation_prompt(x_ctrl, pert_idx)
             z_prompt_bwd = z_prompt_fwd
             delta_fwd = self.transition_fwd(z_ctrl, z_prompt_fwd)
@@ -262,7 +253,6 @@ class REGINA(pl.LightningModule):
             loss_cycle_pert = F.mse_loss(z_rec_pert, z_real_pert)
             lossDict['loss_cycle_pert'] = loss_cycle_pert
             
-            # Chek if we can fool the discriminator 
             logits_fake = self.discriminator(z_fake_pert, z_prompt_fwd)
             loss_adv = F.mse_loss(logits_fake, torch.ones_like(logits_fake))
             lossDict['loss_adv_g'] = loss_adv
@@ -281,7 +271,7 @@ class REGINA(pl.LightningModule):
             lossDict['loss_recon_anchor'] = loss_recon_anchor
             loss_x_recon = F.mse_loss(x_fake_pert * self.gene_mask, x_pert * self.gene_mask)
             g_loss = (self.lossCycleFactr * (loss_cycle_ctrl + loss_cycle_pert) + 
-                      self.adversarialFactr * loss_adv +   # GAN loss usually has lower weight in CycleGAN
+                      self.adversarialFactr * loss_adv +  
                       self.reconFactr * loss_x_recon
                       )
             lossDict["g_total_loss"] = g_loss
@@ -293,7 +283,6 @@ class REGINA(pl.LightningModule):
                 
                 
                 self.log_collapse_metrics2(mode, z_ctrl, z_fake_pert, z_real_pert)
-                # Reuse x_fake_pert from above instead of decoding z_fake_pert again
                 x_recon_ctrl = self.decoder(z_fake_ctrl)
                 
                 if mode == "val":
@@ -306,12 +295,10 @@ class REGINA(pl.LightningModule):
 
         #Discriminator
         if optimizer_idx == 1:        
-            # 1. Real Data
             z_prompt = self.get_perturbation_prompt(x_ctrl, pert_idx)
             logits_real = self.discriminator(self.add_instance_noise(z_real_pert), z_prompt)
             loss_real = F.mse_loss(logits_real, torch.ones_like(logits_real)*0.9)
             
-            # 2. Fake Data
             with torch.no_grad():
                 delta_fwd = self.transition_fwd(z_ctrl, z_prompt)
                 z_fake_pert = z_ctrl + delta_fwd
@@ -328,7 +315,6 @@ class REGINA(pl.LightningModule):
     def phase_one_shared_step(self, batch, mode):
         x_pert, x_ctrl, pert_idx, pert_state, ctrl_state = batch
         
-        # 1. Parse Original Labels
         if pert_state.dim() > 1 and pert_state.size(1) > 1:
             original_labels = torch.argmax(pert_state, dim=1)
         else:
@@ -349,7 +335,6 @@ class REGINA(pl.LightningModule):
         
         loss_dict['loss_class_critic'] = loss_class_critic
         
-        # Reconstruction & Regularization (unchanged)
         batch_size = x_ctrl.size(0)
         n_valid_elements = self.gene_mask.sum() * batch_size
 
@@ -382,7 +367,6 @@ class REGINA(pl.LightningModule):
         self.logging_metrics(mode, loss_dict)
         
         if mode == "val":
-            # You will need to update logAUROC to handle the two separate logit streams
             
             self.logAUROC(mode, logits, original_labels) 
             self.log_variance_health(mode, x_pert, x_recon_pert)
@@ -457,9 +441,6 @@ class REGINA(pl.LightningModule):
         with torch.no_grad():
             z_ctrl = self.encoder(x_ctrl)
             z_prompt = self.get_perturbation_prompt(x_ctrl, pert_idx)
-            # Use flow matching solver instead of direct addition if applicable
-            # z_fake_pert = self.ode_solve(z_ctrl, z_prompt, t_start=0, t_end=1, steps=4)
-            # Or keep your current transition if you haven't switched yet:
             delta_pred = self.transition_fwd(z_ctrl, z_prompt)
             z_fake_pert = z_ctrl + delta_pred
             
@@ -490,21 +471,19 @@ class REGINA(pl.LightningModule):
             real_delta_mean = (x_pert[mask] - x_ctrl[mask]).mean(dim=0).flatten()
             pred_delta_mean = (x_recon_pert[mask] - x_ctrl[mask]).mean(dim=0).flatten()
             
-            # --- KEY CHANGE: Apply Gene Mask ---
-            # We index into the flattened vector using the boolean mask
+          
             real_delta_vector = real_delta_mean[flat_mask]
             pred_delta_vector = pred_delta_mean[flat_mask]
             
-            # Safety: Check for flat vectors (std=0) to avoid NaNs
+            
             if torch.std(real_delta_vector) < 1e-6 or torch.std(pred_delta_vector) < 1e-6:
                 continue
 
-            # --- Metric 1: Global Pearson ---
+         
             p_all = pearson_corrcoef(pred_delta_vector, real_delta_vector)
             batch_pearson_all.append(p_all)
 
-            # --- Metric 2: Top 5% Pearson ---
-            # Calculate threshold on the REAL biological signal
+        
             threshold = torch.quantile(torch.abs(real_delta_vector), 0.95)
             top_mask = torch.abs(real_delta_vector) > threshold
             
@@ -532,7 +511,6 @@ class REGINA(pl.LightningModule):
         Calculates Direction Error per UNIQUE perturbation in the batch.
         Prevents averaging different perturbations together.
         """
-        # 1. Generate Prediction (Batch-wise for speed)
         with torch.no_grad():
             z_ctrl = self.encoder(x_ctrl)
             z_prompt = self.get_perturbation_prompt(x_ctrl, pert_idx)
@@ -540,39 +518,34 @@ class REGINA(pl.LightningModule):
             z_fake_pert = z_ctrl + delta_pred
             x_recon_pert = self.decoder(z_fake_pert)
 
-        # 2. Identify unique perturbations
         unique_perts = torch.unique(pert_idx, dim=0)
         batch_errors = []
 
-        # 3. Iterate through each perturbation group
         for p_id in unique_perts:
             mask = (pert_idx == p_id).all(dim=1)
             
             # Safety: Ensure we have cells for this perturbation
             if mask.sum() == 0: continue
 
-            # 4. Calculate Pseudo-bulk Vectors for THIS perturbation only
-            # We average the cells belonging to p_id
+         
             real_delta = (x_pert[mask] - x_ctrl[mask]).mean(dim=0).flatten()
             pred_delta = (x_recon_pert[mask] - x_ctrl[mask]).mean(dim=0).flatten()
 
-            # 5. Identify Top N Movers (Standard Logic)
-            # Find genes with largest ABSOLUTE real change
+           
             top_vals, top_indices = torch.topk(torch.abs(real_delta), k=top_n)
 
-            # 6. Check Signs on those specific genes
+            
             real_signs = torch.sign(real_delta[top_indices])
             pred_signs = torch.sign(pred_delta[top_indices])
 
-            # 7. Calculate Error
-            # Product is negative if signs are opposite (e.g. 1 * -1 = -1)
+         
             sign_product = real_signs * pred_signs
             n_opposite = (sign_product < 0).float().sum()
             percent_opposite = n_opposite / float(top_n)
             
             batch_errors.append(percent_opposite)
 
-        # 8. Aggregate and Log
+       
         if len(batch_errors) > 0:
             # Average the error across all perturbations in this batch
             avg_error = torch.stack(batch_errors).mean()
@@ -591,24 +564,24 @@ class REGINA(pl.LightningModule):
         Dynamically logs AUROC and Confusion Matrix for any number of classes.
         Accepts raw logits and either 1D label indices or 2D one-hot targets.
         """
-        # 1. Parse labels safely (handles both 1D and 2D target formats)
+       
         if targets.dim() > 1 and targets.size(1) > 1:
             original_labels = torch.argmax(targets, dim=1)
         else:
             original_labels = targets.long()
             
-        # 2. Convert to probabilities (AUROC metric requires probs in [0, 1])
+     
         probs = torch.softmax(logits, dim=1)
             
-        # 3. Build generic Multi-Hot Targets dynamically based on __init__
+      
         B = original_labels.size(0)
         multi_hot_targets = torch.zeros((B, self.num_classes), dtype=torch.long, device=self.device)
         multi_hot_targets.scatter_(1, original_labels.unsqueeze(1), 1)
         
-        # 4. Update Multi-Label AUROC (Accumulate only)
+        
         self.classwise_auc.update(probs, multi_hot_targets)
         
-        # 5. Update Confusion Matrix (Validation only)
+        
         if mode == "val":
             if self.current_epoch % 5 == 0 and not self.trainer.sanity_checking:
                 preds_discrete = torch.argmax(logits, dim=1)
@@ -714,9 +687,7 @@ class REGINA(pl.LightningModule):
         Checks if the model is capturing the dynamic range (variance) of the data
         or just predicting the mean (which has 0 variance).
         """
-        # 1. Flatten Batch and Patch dimensions to get [Total_Cells, Genes]
-        # We want variance across the entire batch/population
-        # Assuming input is [Batch, Patches, Genes] -> [Batch*Patches, Genes]
+      
         if x_real.dim() == 3:
             real_flat = x_real.reshape(-1, x_real.shape[-1])
             recon_flat = x_recon.reshape(-1, x_recon.shape[-1])
@@ -724,27 +695,24 @@ class REGINA(pl.LightningModule):
             real_flat = x_real
             recon_flat = x_recon
 
-        # 2. Calculate Variance per Gene (dim=0)
+       
         var_real = torch.var(real_flat, dim=0)
         var_recon = torch.var(recon_flat, dim=0)
 
-        # 3. Identify the Top 50 Most Variable Genes in REAL data
-        # (These are the ones that matter: Cell Cycle genes, CRISPR targets)
+       
         top_vals, top_indices = torch.topk(var_real, k=50)
 
-        # 4. Compare Variances ONLY on these Top 50 genes
+        #
         var_real_top = var_real[top_indices]
         var_recon_top = var_recon[top_indices]
 
-        # 5. The Metric: Ratio of Reconstruction Variance to Real Variance
-        # Avoid div by zero with 1e-8
+     
         variance_preservation = var_recon_top.mean() / (var_real_top.mean() + 1e-8)
 
         # 6. Log it
         self.log(f"{mode}/Health_Var_Preservation{postfix}", variance_preservation, 
                 prog_bar=False, sync_dist=True)
         
-        # Optional: Log the Raw Variance numbers to see scale
         self.log(f"{mode}/Debug_Var_Real_Mean{postfix}", var_real_top.mean(), sync_dist=True)
         self.log(f"{mode}/Debug_Var_Recon_Mean{postfix}", var_recon_top.mean(), sync_dist=True)
 
@@ -753,10 +721,8 @@ class REGINA(pl.LightningModule):
     def log_collapse_metrics(self, z, delta, z_cycle):
         # Calculate std across the batch
         z_std = z.std(dim=0) 
-        # How many dimensions have significant variance?
         active_dims = (z_std > 0.01).sum().float()
         
-        # Check for "Lazy" Transitions (Identity Collapse)
         delta_mag = delta.norm(dim=1).mean()
         z_mag = z.norm(dim=1).mean()
         delta_ratio = delta_mag / (z_mag + 1e-8)
@@ -770,21 +736,16 @@ class REGINA(pl.LightningModule):
         self.log(f"Health/Cycle_Integrity", cycle_error, sync_dist=True)  
 
     def on_validation_epoch_end(self):
-        # We wrap in a try-except just in case DDP sanity checks run with empty batches
         if self.phase == 1:
             try:
-                # 1. Compute the dictionary of class-wise AUROC scores
                 auc_dict = self.classwise_auc.compute()
                 
-                # 2. Log the entire dictionary at once
                 self.log_dict(auc_dict, sync_dist=True, prog_bar=False)
                 
             except Exception as e:
-                # Lightning sanity checks can sometimes cause empty metric computes
                 print(f"Skipping AUROC compute on Rank {self.global_rank}: {e}")
                 
             finally:
-                # 3. Safely reset the metric for the next epoch
                 self.classwise_auc.reset()
 
     
