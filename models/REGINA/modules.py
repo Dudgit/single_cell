@@ -7,17 +7,16 @@ class TransformerCycleEncoder(nn.Module):
         self.token_proj = nn.Linear(input_dim, d_model)
         encoder_layer = nn.TransformerEncoderLayer(d_model=d_model,nhead=n_heads,dim_feedforward=4 * d_model,batch_first=True,norm_first=True)
         self.encoder = nn.TransformerEncoder(encoder_layer, n_layers)
-        self.flatten_dim = d_model * seq_len  #sequence length is seq_len
+        self.flatten_dim = d_model * seq_len 
         self.latent = nn.Linear(self.flatten_dim, z_dim)
         self.norm = nn.LayerNorm(z_dim)
 
     def forward(self, x):
-        # x: (B, 32, 675)
-        x = self.token_proj(x)  # (B, 32, d_model)
-        x = self.encoder(x)     # (B, 32, d_model)
+        x = self.token_proj(x)  
+        x = self.encoder(x)     
 
-        x = x.flatten(start_dim=1)  # Flatten the sequence dimension
-        z = self.latent(x)     # (B, z_dim)
+        x = x.flatten(start_dim=1)  
+        z = self.latent(x)     
         z= self.norm(z)
         return z
 
@@ -36,11 +35,10 @@ class TransformerCycleDecoder(nn.Module):
         self.output_proj = nn.Linear(d_model, output_dim)
 
     def forward(self, z):
-        # z: (B, z_dim)
-        x = self.latent_expansion(z) # (B, 32 * 256)
-        x = x.view(-1, self.seq_len, self.d_model) # (B, 32, 256)
-        x = self.decoder_transformer(x) # (B, 32, 256)
-        out = self.output_proj(x)       # (B, 32, 675)
+        x = self.latent_expansion(z) 
+        x = x.view(-1, self.seq_len, self.d_model) 
+        x = self.decoder_transformer(x) 
+        out = self.output_proj(x)      
         return out
     
 class ResidualBlock(nn.Module):
@@ -54,27 +52,22 @@ class ResidualBlock(nn.Module):
             nn.BatchNorm1d(hidden_dim)
         )
     def forward(self, x):
-        return x + self.block(x) # Skip connection
-
+        return x + self.block(x)
 class LatentTransition2(nn.Module):
     def __init__(self, num_genes, z_dim=256, cond_dim=128, hidden_dim=512,num_states=4):
         super().__init__()
         
-        # 1. Condition Embedding (Make it larger: 64 -> 128)
         self.cond_embedding = nn.Embedding(
             num_embeddings=num_genes + 1, 
             embedding_dim=cond_dim, 
             padding_idx=num_genes
         )
         self.state_embedding = nn.Embedding(num_states, cond_dim)
-        # 2. The FiLM Generator
-        # Predicts Scale (gamma) and Shift (beta) for the hidden layer
         self.film_gen = nn.Sequential(
             nn.Linear(cond_dim+cond_dim, hidden_dim * 2), # *2 because we need gamma AND beta
             nn.LeakyReLU(0.2)
         )
         
-        # 3. The Core Network (Pre-activation style)
         self.fc1 = nn.Linear(z_dim, hidden_dim)
         self.res_blocks = nn.Sequential(
             ResidualBlock(hidden_dim),
@@ -87,19 +80,15 @@ class LatentTransition2(nn.Module):
         #self.act = nn.LeakyReLU(0.2)
 
     def forward(self, z, gene_index, state_index):
-        # 1. Get Condition
-        # gene_index: [Batch]
-        c = self.cond_embedding(gene_index) # [B, cond_dim]
+        c = self.cond_embedding(gene_index) 
         s = self.state_embedding(state_index)
         context = torch.cat([c, s], dim=1)
         
-        # 2. Generate Modulators (Gamma, Beta)
-        film_params = self.film_gen(context) # [B, hidden_dim * 2]
-        gamma, beta = torch.chunk(film_params, 2, dim=1) # Split into two parts
+        film_params = self.film_gen(context) 
+        gamma, beta = torch.chunk(film_params, 2, dim=1) 
         
-        # 3. Apply to Z
-        # Layer 1
-        h = self.fc1(z) # [B, hidden_dim]
+        
+        h = self.fc1(z) 
         h = h * (1 + gamma) + beta 
         #h = self.act(h)
         h = self.res_blocks(h)
@@ -115,45 +104,36 @@ class LatentTransition(nn.Module):
     def __init__(self, num_genes, z_dim=256, cond_dim=128, hidden_dim=512,num_states=4):
         super().__init__()
         
-        # 1. Condition Embedding (Make it larger: 64 -> 128)
         self.cond_embedding = nn.Embedding(
             num_embeddings=num_genes + 1, 
             embedding_dim=cond_dim, 
             padding_idx=num_genes
         )
         self.state_embedding = nn.Embedding(num_states, cond_dim)
-        # 2. The FiLM Generator
-        # Predicts Scale (gamma) and Shift (beta) for the hidden layer
         self.film_gen = nn.Sequential(
             nn.Linear(cond_dim+cond_dim, hidden_dim * 2), # *2 because we need gamma AND beta
             nn.LeakyReLU(0.2)
         )
         
-        # 3. The Core Network (Pre-activation style)
         self.fc1 = nn.Linear(z_dim, hidden_dim)
         self.fc2 = nn.Linear(hidden_dim, hidden_dim)
         self.fc_out = nn.Linear(hidden_dim, z_dim)
         self.act = nn.LeakyReLU(0.2)
 
     def forward(self, z, gene_index, state_index):
-        # 1. Get Condition
-        # gene_index: [Batch]
-        c = self.cond_embedding(gene_index) # [B, cond_dim]
+        c = self.cond_embedding(gene_index)
         s = self.state_embedding(state_index)
         context = torch.cat([c, s], dim=1)
         
-        # 2. Generate Modulators (Gamma, Beta)
-        film_params = self.film_gen(context) # [B, hidden_dim * 2]
-        gamma, beta = torch.chunk(film_params, 2, dim=1) # Split into two parts
-        
-        # 3. Apply to Z
-        # Layer 1
-        h = self.fc1(z) # [B, hidden_dim]
+        film_params = self.film_gen(context) 
+        gamma, beta = torch.chunk(film_params, 2, dim=1) 
+       
+        h = self.fc1(z) 
         h = h * (1 + gamma) + beta 
         h = self.act(h)
         h = self.act(self.fc2(h))
         delta = self.fc_out(h)
-        # delta = torch.tanh(delta) * 5.0 # Cap max change to +/- 5 units
+        # delta = torch.tanh(delta) * 5.0
         return delta
     
 import torch.nn.utils.spectral_norm as spectral_norm
@@ -162,13 +142,11 @@ class LatentClassifier(nn.Module):
     def __init__(self, z_dim=256, num_classes=4, hidden_dim=128):
         super().__init__()
         self.classifier = nn.Sequential(
-            # Layer 1
             spectral_norm(nn.Linear(z_dim, hidden_dim)),
             nn.BatchNorm1d(hidden_dim),  
             nn.LeakyReLU(0.2),           
             nn.Dropout(0.2),             
 
-            # Layer 2 (Output)
             spectral_norm(nn.Linear(hidden_dim, num_classes))
         )
 
@@ -189,7 +167,6 @@ class BertLikeClassifier(nn.Module):
 class LatentDiscriminator(nn.Module):
     def __init__(self, z_dim=256, num_genes=21600):
         super().__init__()
-        # Condition on the Gene being perturbed!
         self.gene_embed = nn.Embedding(num_genes, 32)
         
         self.net = nn.Sequential(
@@ -197,12 +174,11 @@ class LatentDiscriminator(nn.Module):
             nn.LeakyReLU(0.2),
             nn.Linear(512, 256),
             nn.LeakyReLU(0.2),
-            nn.Linear(256, 1) # Output: Real (1) vs Fake (0)
+            nn.Linear(256, 1) 
         )
         
     def forward(self, z, gene_idx):
-        # Concatenate Latent Vector + Gene Embedding
-        gene_emb = self.gene_embed(gene_idx) # [B, 32]
+        gene_emb = self.gene_embed(gene_idx) 
         inp = torch.cat([z, gene_emb], dim=1)
         return self.net(inp)
 
@@ -210,25 +186,18 @@ class LatentDiscriminator(nn.Module):
 class SemanticDiscriminator(nn.Module):
     def __init__(self, z_dim=256):
         super().__init__()
-        # REMOVED: self.gene_embed = nn.Embedding(num_genes, 32)
-        # We no longer need a lookup table. The "Prompt" is the embedding.
+
         
         self.net = nn.Sequential(
-            # Input: Latent State (z_dim) + Semantic Prompt (z_dim)
-            # 256 + 256 = 512 input features
+           
             nn.Linear(z_dim * 2, 512),
             nn.LeakyReLU(0.2),
             nn.Linear(512, 256),
             nn.LeakyReLU(0.2),
-            nn.Linear(256, 1) # Output: Real (1) vs Fake (0)
+            nn.Linear(256, 1) 
         )
         
     def forward(self, z, z_prompt):
-        """
-        z: The cell state to evaluate (Real or Fake)
-        z_prompt: The 'Instruction' vector describing the perturbation
-        """
-        # Concatenate the State and the Instruction
         inp = torch.cat([z, z_prompt], dim=1)
         return self.net(inp)
 
@@ -236,9 +205,7 @@ class DeltaTransition(nn.Module):
     def __init__(self, z_dim=256, hidden_dim=512):
         super().__init__()
         
-        # Input is now:
-        # 1. z_ctrl (Current State)
-        # 2. z_delta_theoretical (The "Instruction" from the Encoder)
+       
         
         self.net = nn.Sequential(
             # We concatenate state + theoretical_change
@@ -252,11 +219,9 @@ class DeltaTransition(nn.Module):
         nn.init.zeros_(self.net[-1].weight)
 
     def forward(self, z_ctrl, z_theoretical_delta):
-        # z_theoretical_delta = Encoder(Input_Zeroed) - Encoder(Input_Ctrl)
         
         inp = torch.cat([z_ctrl, z_theoretical_delta], dim=1)
         
-        # Predict the Biological Cascade (The "Real" Delta)
         delta_pred = self.net(inp)
         
         return delta_pred
@@ -281,8 +246,7 @@ class DeltaTransitionv2(nn.Module):
     def __init__(self, z_dim=256, hidden_dim=512):
         super().__init__()
         
-        # We project the theoretical delta (prompt) separately to create a "bias"
-        # for the state transformation.
+       
         self.prompt_proj = nn.Sequential(
             nn.Linear(z_dim, hidden_dim),
             nn.LeakyReLU(0.2)
@@ -300,23 +264,16 @@ class DeltaTransitionv2(nn.Module):
         
         self.output_head = nn.Linear(hidden_dim, z_dim)
         
-        # Zero-initialize the output head so the model starts with delta = 0
         nn.init.zeros_(self.output_head.weight)
         nn.init.zeros_(self.output_head.bias)
 
     def forward(self, z_ctrl, z_theoretical_delta):
-        # 1. Embed the control state and the perturbation prompt
         p_emb = self.prompt_proj(z_theoretical_delta)
         s_emb = self.state_proj(z_ctrl)
         
-        # 2. Fuse information (Add is often more stable than concat for small z_dims)
         combined = s_emb + p_emb
         
-        # 3. Predict the non-linear biological cascade
         features = self.backbone(combined)
         delta_biol = self.output_head(features)
         
-        # 4. Residual Connection from the theoretical signal
-        # This ensures that even if the network is weak, the original 
-        # perturbation signal is passed through.
         return z_theoretical_delta + delta_biol
