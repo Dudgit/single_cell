@@ -10,17 +10,19 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 **Datasets**<br>
-[![Dataset: Norman](https://img.shields.io/badge/Dataset-Norman-lightgreen)](YOUR_LINK_HERE)
-[![Dataset: Adamson](https://img.shields.io/badge/Dataset-Adamson-lightgreen)](YOUR_LINK_HERE)
-[![Dataset: Dixit](https://img.shields.io/badge/Dataset-Dixit-lightgreen)](YOUR_LINK_HERE)
-[![Dataset: Replogle](https://img.shields.io/badge/Dataset-Replogle-lightgreen)](YOUR_LINK_HERE)
+[![Dataset: Norman (GEO)](https://img.shields.io/badge/Dataset-Norman-lightgreen)](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE133344)
+[![Dataset: Adamson (GEO)](https://img.shields.io/badge/Dataset-Adamson-lightgreen)](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE90546)
+[![Dataset: Dixit (GEO)](https://img.shields.io/badge/Dataset-Dixit-lightgreen)](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE90063)
+[![Dataset: Replogle (GWPS)](https://img.shields.io/badge/Dataset-Replogle-lightgreen)](https://gwps.wi.mit.edu/)
 
 **Baselines**<br>
 [![Baseline: GEARS](https://img.shields.io/badge/Baseline-GEARS-orange)](https://github.com/snap-stanford/GEARS)
-[![Baseline: CPA](https://img.shields.io/badge/Baseline-CPA-red)](YOUR_LINK_HERE)
-[![Baseline: PerturbNet](https://img.shields.io/badge/Baseline-PerturbNet-blue)](YOUR_LINK_HERE)
+[![Baseline: CPA](https://img.shields.io/badge/Baseline-CPA-red)](https://github.com/facebookresearch/CPA)
+[![Baseline: PerturbNet](https://img.shields.io/badge/Baseline-PerturbNet-blue)](https://github.com/welch-lab/PerturbNet)
 
 </div>
+
+---
 
 ---
 # REGINA: Regularized Encoder with Latent Cycle-GAN for In-vitro Neural Cell Perturbation Approximation.
