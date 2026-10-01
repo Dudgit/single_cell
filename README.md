@@ -1,3 +1,28 @@
+<div align="center">
+
+# REGINA
+**Regularized Encoder with Latent Cycle-GAN for In-vitro Neural Cell Perturbation Approximation**
+
+**Environment & Tools**<br>
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![PyTorch](https://img.shields.io/badge/PyTorch-EE4C2C?logo=pytorch&logoColor=white)](https://pytorch.org/)
+[![Container: Singularity](https://img.shields.io/badge/Container-Singularity-purple)](https://docs.sylabs.io/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+**Datasets**<br>
+[![Dataset: Norman](https://img.shields.io/badge/Dataset-Norman-lightgreen)](YOUR_LINK_HERE)
+[![Dataset: Adamson](https://img.shields.io/badge/Dataset-Adamson-lightgreen)](YOUR_LINK_HERE)
+[![Dataset: Dixit](https://img.shields.io/badge/Dataset-Dixit-lightgreen)](YOUR_LINK_HERE)
+[![Dataset: Replogle](https://img.shields.io/badge/Dataset-Replogle-lightgreen)](YOUR_LINK_HERE)
+
+**Baselines**<br>
+[![Baseline: GEARS](https://img.shields.io/badge/Baseline-GEARS-orange)](https://github.com/snap-stanford/GEARS)
+[![Baseline: CPA](https://img.shields.io/badge/Baseline-CPA-red)](YOUR_LINK_HERE)
+[![Baseline: PerturbNet](https://img.shields.io/badge/Baseline-PerturbNet-blue)](YOUR_LINK_HERE)
+
+</div>
+
+---
 # REGINA: Regularized Encoder with Latent Cycle-GAN for In-vitro Neural Cell Perturbation Approximation.
 In this github we introduce every material needed for our REGINA research. This is a virtuall cell modelling pipeline with generative AI approaches centered around Cycle-GAN workflow.
 
